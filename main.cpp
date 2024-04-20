@@ -1,6 +1,7 @@
 #include "DxLib.h";
 #include "main.h";
 #include <stdlib.h>
+#include <math.h>
 
 //定数の定義
 const int SCREEN_WIDTH = 1200, SCREEN_HEIGHT = 720;
@@ -11,6 +12,9 @@ const int ENEMY_MAX = 100; //敵機の最大数
 const int STAGE_DISTANCE = FPS * 60; // ステージの長さ
 const int PLAYER_SHIELD_MAX = 8; // 自機のシールドの最大値
 const int EFFECT_MAX = 100; //エフェクトの最大数
+const int ITEM_TYPE = 3; //アイテムの種類
+const int WEAPON_LV_MAX = 10; // 武器レベルの最大値
+const int PLAYER_SPEED_MAX = 20; // 自機の速さの最大値
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
 enum { EFF_EXPLODE, EFF_RECOVER };
 
@@ -27,12 +31,14 @@ int _stage = 1;
 int _score = 0;
 int _highScore = 10000; 
 int _noDamageFrameCount = 0; // 無敵状態時の時間を保持
+int _weaponLV = 1; // 自機の武器のレベル（同時に発射される弾数）
 
 
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
 struct OBJECT enemy[ENEMY_MAX];
 struct OBJECT effect[EFFECT_MAX]; // エフェクト用の構造体の配列
+struct OBJECT item;
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -83,9 +89,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//ボス出現
 		if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
 
+		//アイテムの出現
+		if (_distance % 800 == 1) setItem();
+
 		moveEnemy();
 		movePlayer();
 		moveBullet();
+		moveItem();
 
 		drawEffect(); //エフェクトの描画
 		stageMap();
@@ -226,18 +236,24 @@ void scrollBG(int spd)
 /// <param name=""></param>
 void setBullet(void)
 {
-	for (int i = 0; i < BULLET_MAX; i++)
+	for (int n = 0; n < _weaponLV; n++)
 	{
-		if (bullet[i].isState == 0)
+		int x = player.x - (_weaponLV * 5) + n * 10;
+		int y = player.y - 20;
+		for (int i = 0; i < BULLET_MAX; i++)
 		{
-			bullet[i].x = player.x;
-			bullet[i].y = player.y - 20;
-			bullet[i].vx = 0;
-			bullet[i].vy = -20;
-			bullet[i].isState = 1;
-			break;
+			if (bullet[i].isState == 0)
+			{
+				bullet[i].x = x;
+				bullet[i].y = y;
+				bullet[i].vx = 0;
+				bullet[i].vy = -40;
+				bullet[i].isState = 1;
+				break;
+			}
 		}
 	}
+	PlaySoundMem(_shotSE, DX_PLAYTYPE_BACK); // 効果音
 }
 
 /// <summary>
@@ -431,6 +447,8 @@ void drawParameter(void)
 		DrawBox(x + 2 + i * 30, y + 2, x + 28 + i * 30, y + 18, GetColor(r, g, b), TRUE);
 	}
 	drawText(x, y - 25, "SHILED LV %02d", player.shield, 0xffffff, 20);
+	drawText(x, y - 50, "WEAPON LV %02d", _weaponLV, 0xffffff, 20);
+	drawText(x, y - 75, "SPEED %02d", player.vx, 0xffffff, 20);
 
 }
 
@@ -472,8 +490,74 @@ void drawEffect(void)
 			break;
 
 		case EFF_RECOVER:
+			if (effect[i].timer < 30)
+				SetDrawBlendMode(DX_BLENDMODE_ADD, effect[i].timer * 8);
+			else
+				SetDrawBlendMode(DX_BLENDMODE_ADD, (60 - effect[i].timer) * 8);
+
+			for(int i = 3; i < 8; i++) 
+				DrawCircle(player.x, player.y, (player.width + player.height) / i, 0x2040c0, TRUE);
+
+			SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+			effect[i].timer++;
+			if (effect[i].timer == 60) effect[i].isState = 0;
 			break;
 		}
+	}
+}
+
+/// <summary>
+/// アイテムをセットする
+/// </summary>
+/// <param name=""></param>
+void setItem(void)
+{
+	item.x = (SCREEN_WIDTH / 4) * (1 + rand() % 3);
+	item.y = -16;
+	item.vx = 15;
+	item.vy = 1;
+	item.isState = 1;
+	item.timer = 0;
+}
+
+/// <summary>
+/// アイテムの処理
+/// </summary>
+/// <param name=""></param>
+void moveItem(void)
+{
+	if (item.isState == 0) return;
+	item.x += item.vx;
+	item.y += item.vy;
+	if (item.timer % 60 < 30) item.vx -= 1;
+	else item.vx += 1;
+	if (item.y > SCREEN_HEIGHT + 16) item.isState = 0;
+	item.pattern = (item.timer / 120) % ITEM_TYPE; //時間経過でアイテムのタイプを変更する
+	item.timer++;
+	DrawRectGraph(item.x - 20, item.y - 16, item.pattern * 40, 0, 40, 32, _imgItem, TRUE, FALSE);
+	// if(scene == GAMEOVER) return;
+	int dis = pow(item.x - player.x, 2) + pow(item.y - player.y, 2);
+	if (dis < pow(60, 2))
+	{
+		item.isState = 0;
+		if (item.pattern == 0)
+		{
+			if (player.vx < PLAYER_SPEED_MAX)
+			{
+				player.vx += 3;
+				player.vy += 3;
+			}
+		}
+		else if (item.pattern == 1)
+		{
+			if (player.shield < PLAYER_SHIELD_MAX) player.shield++;
+			setEffect(player.x, player.y, EFF_RECOVER);
+		}
+		else if (item.pattern == 2)
+		{
+			if (_weaponLV < WEAPON_LV_MAX) _weaponLV++;
+		}
+		PlaySoundMem(_itemSE, DX_PLAYTYPE_BACK);
 	}
 }
 
