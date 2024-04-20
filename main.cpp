@@ -78,7 +78,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		{
 		case TITLE:
 			drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "Shooting Game", 0xffffff, 80);
-			drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
+			drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
 			if (CheckHitKey(KEY_INPUT_SPACE))
 			{
 				initVariable();
@@ -506,22 +506,6 @@ void damageEnemy(int n, int damage)
 }
 
 /// <summary>
-/// 影を付けた文字列と値を表示する関数
-/// </summary>
-/// <param name="x"></param>
-/// <param name="y"></param>
-/// <param name="txt"></param>
-/// <param name="val"></param>
-/// <param name="col"></param>
-/// <param name="fontSize"></param>
-void drawText(int x, int y, const char* txt, int val, int col, int fontSize)
-{
-	SetFontSize(fontSize);
-	DrawFormatString(x + 1, y + 1, 0x000000, txt, val);
-	DrawFormatString(x, y, col, txt, val);
-}
-
-/// <summary>
 /// 自機に関するパラメーターを表示
 /// </summary>
 /// <param name=""></param>
@@ -652,14 +636,74 @@ void moveItem(void)
 	}
 }
 
+/// <summary>
+/// 影を付けた文字列と値を表示する関数
+/// </summary>
+/// <param name="x"></param>
+/// <param name="y"></param>
+/// <param name="txt"></param>
+/// <param name="val"></param>
+/// <param name="col"></param>
+/// <param name="fontSize"></param>
+void drawText(int x, int y, const char* txt, int val, int col, int fontSize)
+{
+	SetFontSize(fontSize);
+	DrawFormatString(x + 1, y + 1, 0x000000, txt, val);
+	DrawFormatString(x, y, col, txt, val);
+}
+
+/// <summary>
+/// テキストを中央に表示させる
+/// </summary>
 void drawTextCenter(int x, int y, const char* txt, int col, int fontSize)
 {
+	//drawText関数と被ってしまうが、事前にテキストの大きさを適切に取得しておく必要があるためフォントサイズを変更する
 	SetFontSize(fontSize);
 	int strWidth = GetDrawStringWidth(txt, strlen(txt));
 	x -= strWidth / 2;
 	y -= fontSize / 2;
-	DrawString(x + 1, y + 1, txt, 0x000000);
-	DrawString(x, y, txt, col);
+	drawText(x, y, txt, ' ', col, fontSize);
+}
+
+// Ease Out Cubic関数
+double EaseOutCubic(double x) {
+	double p = 1 - x;
+	return 1 - pow(p, 3);
+}
+
+// アルファ値を計算する関数
+int CalculateAlpha(int time, int duration) {
+	// 正規化された時間 (0.0 から 1.0)
+	// duration の半分で折り返す
+	double normalizedTime = static_cast<double>(time % duration) / duration;
+	double triangleWave;
+
+	// 三角波を生成（0から1へ上昇し、再び0へ下降）
+	if (normalizedTime < 0.5) {
+		triangleWave = 2.0 * normalizedTime;  // 0.0から1.0へ
+	}
+	else {
+		triangleWave = 2.0 * (1.0 - normalizedTime);  // 1.0から0.0へ
+	}
+
+	// Ease Out Cubicを適用して滑らかな変化を作る
+	double eased = EaseOutCubic(triangleWave);
+
+	// アルファ値 (0 から 255)
+	return static_cast<int>(255 * eased);
+}
+
+/// <summary>
+/// テキストを点滅して表示する
+/// </summary>
+void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize)
+{
+	// アルファ値を計算 (80フレームごとに繰り返し)
+	int _alpha = CalculateAlpha(_timer, 80);
+	// 描画モードをアルファブレンドにして透明度を時間に合わせて変更させる
+	SetDrawBlendMode(DX_BLENDMODE_ALPHA, _alpha);
+	drawTextCenter(x, y, txt, col, fontSize);
+	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 }
 
 /// <summary>
