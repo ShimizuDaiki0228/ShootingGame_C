@@ -57,6 +57,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	_distance = STAGE_DISTANCE;
 	int titleTextAlpha = 0;
 	int titleBlackLayerAlpha = 255;
+	int titleTextHeight = SCREEN_HEIGHT / 2; //タイトルテキストを上から表示する際の初期位置
 	bool isCreatorScreenFinished = false;
 
 	while (1)
@@ -113,12 +114,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			if (isCreatorScreenFinished)
 			{
 				if(titleBlackLayerAlpha > 0) titleBlackLayerAlpha--;
-				drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "Shooting Game", 0xffffff, 80);
-				drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
-				if (CheckHitKey(KEY_INPUT_SPACE))
+				if (titleTextHeight > 0) titleTextHeight -= 2;
+				drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3 - titleTextHeight, "Shooting Game", 0xffffff, 80);
+
+				if (titleTextHeight <= 0)
 				{
-					initVariable();
-					_scene = PLAY;
+					drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
+					if (CheckHitKey(KEY_INPUT_SPACE))
+					{
+						initVariable();
+						_scene = PLAY;
+					}
 				}
 			}
 			
