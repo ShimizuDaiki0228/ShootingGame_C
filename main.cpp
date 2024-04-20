@@ -10,7 +10,9 @@ const int BULLET_MAX = 100; // 自機が発射する弾の最大数
 const int ENEMY_MAX = 100; //敵機の最大数
 const int STAGE_DISTANCE = FPS * 60; // ステージの長さ
 const int PLAYER_SHIELD_MAX = 8; // 自機のシールドの最大値
-enum {ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS}; //敵機の種類
+const int EFFECT_MAX = 100; //エフェクトの最大数
+enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
+enum { EFF_EXPLODE, EFF_RECOVER };
 
 //ゲームに使用する変数や配列を定義
 int _imgGalaxy, _imgFloor, _imgWallL, _imgWallR; // 背景画像
@@ -30,6 +32,7 @@ int _noDamageFrameCount = 0; // 無敵状態時の時間を保持
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
 struct OBJECT enemy[ENEMY_MAX];
+struct OBJECT effect[EFFECT_MAX]; // エフェクト用の構造体の配列
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -80,14 +83,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		//ボス出現
 		if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
 
-		//自機のシールドなどのパラメーターを表示
-		drawParameter();
-
 		moveEnemy();
-
 		movePlayer();
 		moveBullet();
+
+		drawEffect(); //エフェクトの描画
 		stageMap();
+		drawParameter(); //自機のシールドなどのパラメーターを表示
 
 		ScreenFlip();
 		WaitTimer(1000 / FPS);
@@ -392,6 +394,7 @@ void damageEnemy(int n, int damage)
 	if (enemy[n].shield <= 0)
 	{
 		enemy[n].isState = 0;
+		setEffect(enemy[n].x, enemy[n].y, EFF_EXPLODE); //爆発演出
 	}
 }
 
@@ -429,6 +432,49 @@ void drawParameter(void)
 	}
 	drawText(x, y - 25, "SHILED LV %02d", player.shield, 0xffffff, 20);
 
+}
+
+/// <summary>
+/// エフェクトのセット
+/// </summary>
+/// <param name="x"></param>
+/// <param name="y"></param>
+/// <param name="pattern"></param>
+void setEffect(int x, int y, int pattern)
+{
+	static int effectNum;
+	effect[effectNum].x = x;
+	effect[effectNum].y = y;
+	effect[effectNum].isState = 1;
+	effect[effectNum].pattern = pattern;
+	effect[effectNum].timer = 0;
+	effectNum = (effectNum + 1) % EFFECT_MAX;
+	if (pattern == EFF_EXPLODE) PlaySoundMem(_explosionSE, DX_PLAYTYPE_BACK); //効果音
+}
+
+/// <summary>
+/// エフェクトを描画する
+/// </summary>
+/// <param name=""></param>
+void drawEffect(void)
+{
+	int ix;
+	for (int i = 0; i < EFFECT_MAX; i++)
+	{
+		if (effect[i].isState == 0) continue;
+		switch (effect[i].pattern)
+		{
+		case EFF_EXPLODE:
+			ix = effect[i].timer * 128; //画像の切り出し位置
+			DrawRectGraph(effect[i].x - 64, effect[i].y - 64, ix, 0, 128, 128, _imgExplosion, TRUE, FALSE);
+			effect[i].timer++;
+			if (effect[i].timer == 7) effect[i].isState = 0;
+			break;
+
+		case EFF_RECOVER:
+			break;
+		}
+	}
 }
 
 /// <summary>

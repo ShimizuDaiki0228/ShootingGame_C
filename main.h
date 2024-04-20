@@ -29,3 +29,5 @@ void stageMap(void);
 void damageEnemy(int n, int damage);
 void drawText(int x, int y, const char* txt, int val, int col, int siz);
 void drawParameter(void);
+void setEffect(int x, int y, int pattern);
+void drawEffect(void);
