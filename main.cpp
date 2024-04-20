@@ -1,11 +1,15 @@
 #include "DxLib.h";
 #include "main.h";
+#include <stdlib.h>
 
 //定数の定義
 const int SCREEN_WIDTH = 1200, SCREEN_HEIGHT = 720;
 const int FPS = 60;
 const int IMG_ENEMY_MAX = 5; // 敵の画像の枚数（種類）
 const int BULLET_MAX = 100; // 自機が発射する弾の最大数
+const int ENEMY_MAX = 100; //敵機の最大数
+const int STAGE_DISTANCE = FPS * 60; // ステージの長さ
+enum {ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS}; //敵機の種類
 
 //ゲームに使用する変数や配列を定義
 int _imgGalaxy, _imgFloor, _imgWallL, _imgWallR; // 背景画像
@@ -14,9 +18,15 @@ int _imgEnemy[IMG_ENEMY_MAX]; //敵機の画像
 int _imgExplosion;
 int _imgItem; // アイテムの画像
 int _bgm, _gameOverSE, _gameClearSE, _explosionSE, _itemSE, _shotSE;
+int _distance = 0; // ステージ終端までの距離
+int _bossIdx = 0;
+int _stage = 1;
+int _score = 0;
+int _highScore = 10000; 
 
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
+struct OBJECT enemy[ENEMY_MAX];
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -31,13 +41,47 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	initVariable();
 	PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
 
+	_distance = STAGE_DISTANCE;
+
 	while (1)
 	{
 		ClearDrawScreen();
 
 		scrollBG(1);
+		if (_distance > 0) _distance--;
+		DrawFormatString(0, 0, 0xffff00, "Score = %d, HighScore = %d", _score, _highScore);
+		
+		//雑魚機の出現
+		if (_distance % 60 == 1)
+		{
+			int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
+			int y = -50;
+			int enemyType = 1 + rand() % 2;
+			if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
+			else if (enemyType == ENE_ZAK02)
+			{
+				int vx = 0;
+				if (player.x < x - 50) vx -= 3;
+				else if (player.x > x + 50) vx += 3;
+				setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+			}
+		}
+
+		//雑魚機3の出現
+		if (_distance % 120 == 1)
+		{
+			int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
+			setEnemy(x, -100, 0, 40 + rand() % 20, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+		}
+
+		//ボス出現
+		if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
+
+		moveEnemy();
+
 		movePlayer();
 		moveBullet();
+		stageMap();
 
 		ScreenFlip();
 		WaitTimer(1000 / FPS);
@@ -198,4 +242,137 @@ void moveBullet(void)
 		drawImage(_imgBullet, bullet[i].x, bullet[i].y);
 		if (bullet[i].y < -100) bullet[i].isState = 0;
 	}
+}
+
+/// <summary>
+/// 敵機のセット
+/// </summary>
+/// <param name="x"></param>
+/// <param name="y"></param>
+/// <param name="vx"></param>
+/// <param name="vy"></param>
+/// <param name="pettern"></param>
+/// <param name="img"></param>
+/// <param name="durability"></param>
+/// <returns></returns>
+int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int durability)
+{
+	for (int i = 0; i < ENEMY_MAX; i++)
+	{
+		if (enemy[i].isState == 0)
+		{
+			enemy[i].x = x;
+			enemy[i].y = y;
+			enemy[i].vx = vx;
+			enemy[i].vy = vy;
+			enemy[i].isState = 1;
+			enemy[i].pattern = pattern;
+			enemy[i].image = img;
+			enemy[i].durability = durability * _stage; //ステージが進むごとに強くなる
+			GetGraphSize(img, &enemy[i].width, &enemy[i].height); 
+			return i;
+		}
+	}
+	return -1;
+}
+
+/// <summary>
+/// 敵機を動かす
+/// </summary>
+/// <param name=""></param>
+void moveEnemy(void)
+{
+	for (int i = 0; i < ENEMY_MAX; i++)
+	{
+		if (enemy[i].isState == 0) continue;
+		if (enemy[i].pattern == ENE_ZAK03)
+		{
+			if (enemy[i].vy > 1)
+			{
+				enemy[i].vy *= 0.9;
+			}
+			else if (enemy[i].vy > 0)
+			{
+				setEnemy(enemy[i].x, enemy[i].y, 0, 6, ENE_BULLET, _imgEnemy[ENE_BULLET], 0);
+				enemy[i].vx = 8;
+				enemy[i].vy = -4;
+			}
+		}
+		if (enemy[i].pattern == ENE_BOSS)
+		{
+			if (enemy[i].y > SCREEN_HEIGHT - 120) enemy[i].vy = -2;
+			if (enemy[i].y < 120)
+			{
+				if (enemy[i].vy < 0)
+				{
+					for (int bx = -2; bx <= 2; bx++)
+					{
+						for (int by = 0; by <= 3; by++)
+						{
+							if (bx == 0 && by == 0) continue;
+							setEnemy(enemy[i].x, enemy[i].y, bx * 2, by * 2, ENE_BULLET, _imgEnemy[ENE_BULLET], 0);
+						}
+					}
+					enemy[i].vy = 2;
+				}
+			}
+		}
+		enemy[i].x += enemy[i].vx;
+		enemy[i].y += enemy[i].vy;
+		drawImage(enemy[i].image, enemy[i].x, enemy[i].y);
+		if (enemy[i].x < -200
+			|| SCREEN_WIDTH + 200 < enemy[i].x
+			|| enemy[i].y < -200
+			|| SCREEN_HEIGHT + 200 < enemy[i].y) enemy[i].isState = 0;
+
+		if (enemy[i].durability > 0)
+		{
+			for (int j = 0; j < BULLET_MAX; j++)
+			{
+				if (bullet[j].isState == 0) continue;
+				int dx = abs((int)(bullet[j].x - enemy[i].x));
+				int dy = abs((int)(bullet[j].y - enemy[i].y));
+				if (dx < enemy[i].width / 2 && dy < enemy[i].height / 2)
+				{
+					bullet[i].isState = 0;
+					damageEnemy(i, 1);
+				}
+			}
+		}
+	}
+}
+
+/// <summary>
+/// 敵にダメージを与える
+/// </summary>
+/// <param name="n">n番目の敵</param>
+/// <param name="damage">ダメージ量</param>
+void damageEnemy(int n, int damage)
+{
+	SetDrawBlendMode(DX_BLENDMODE_ADD, 192);
+	DrawCircle(enemy[n].x, enemy[n].y, (enemy[n].width + enemy[n].height) / 4, 0xff0000, TRUE);
+	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	_score += 100;
+	if (_score > _highScore) _highScore = _score;
+	enemy[n].durability -= damage;
+	if (enemy[n].durability <= 0)
+	{
+		enemy[n].isState = 0;
+	}
+}
+
+/// <summary>
+/// ステージマップ
+/// </summary>
+/// <param name=""></param>
+void stageMap(void)
+{
+	int mx = SCREEN_WIDTH - 30, my = 60; //マップ表示位置
+	int width = 20, height = SCREEN_HEIGHT - 120; //マップの幅、高さ
+	int pos = (SCREEN_HEIGHT - 140) * _distance / STAGE_DISTANCE; // 自機の飛行している位置
+	SetDrawBlendMode(DX_BLENDMODE_SUB, 128); // 減算による描画の重ね合わせ
+	DrawBox(mx, my, mx + width, my + height, 0xffffff, TRUE); //ステージの位置を表示するバー
+	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	DrawBox(mx - 1, my - 1, mx + width + 1, my + height + 1, 0xffffff, FALSE); //バーの枠線
+	DrawBox(mx, my + pos, mx + width, my + pos + 20, 0x0080ff, TRUE); //自機の位置
 }

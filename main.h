@@ -23,3 +23,7 @@ void drawImage(int img, int x, int y);
 void movePlayer(void);
 void setBullet(void);
 void moveBullet(void);
+int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int durability);
+void moveEnemy(void);
+void stageMap(void);
+void damageEnemy(int n, int damage);
