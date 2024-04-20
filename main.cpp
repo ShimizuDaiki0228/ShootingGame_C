@@ -9,14 +9,15 @@ const int FPS = 60;
 const int IMG_ENEMY_MAX = 5; // 敵の画像の枚数（種類）
 const int BULLET_MAX = 100; // 自機が発射する弾の最大数
 const int ENEMY_MAX = 100; //敵機の最大数
-const int STAGE_DISTANCE = FPS * 60; // ステージの長さ
+const int STAGE_DISTANCE = FPS * 10; // ステージの長さ
 const int PLAYER_SHIELD_MAX = 8; // 自機のシールドの最大値
 const int EFFECT_MAX = 100; //エフェクトの最大数
 const int ITEM_TYPE = 3; //アイテムの種類
 const int WEAPON_LV_MAX = 10; // 武器レベルの最大値
 const int PLAYER_SPEED_MAX = 20; // 自機の速さの最大値
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
-enum { EFF_EXPLODE, EFF_RECOVER };
+enum { EFF_EXPLODE, EFF_RECOVER }; // エフェクトの種類
+enum { TITLE, PLAY, GAMEOVER, CLEAR }; //シーンの種類
 
 //ゲームに使用する変数や配列を定義
 int _imgGalaxy, _imgFloor, _imgWallL, _imgWallR; // 背景画像
@@ -32,6 +33,8 @@ int _score = 0;
 int _highScore = 10000; 
 int _noDamageFrameCount = 0; // 無敵状態時の時間を保持
 int _weaponLV = 1; // 自機の武器のレベル（同時に発射される弾数）
+int _scene = TITLE;
+int _timer = 0; // 時間の進行を管理
 
 
 struct OBJECT player; //自機用の構造体変数
@@ -50,7 +53,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	SetDrawScreen(DX_SCREEN_BACK);
 
 	initGame();
-	initVariable();
+	//initVariable();
 	PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
 
 	_distance = STAGE_DISTANCE;
@@ -59,47 +62,123 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	{
 		ClearDrawScreen();
 
-		scrollBG(1);
-		if (_distance > 0) _distance--;
-		DrawFormatString(0, 0, 0xffff00, "Score = %d, HighScore = %d", _score, _highScore);
-		
-		//雑魚機の出現
-		if (_distance % 60 == 1)
-		{
-			int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
-			int y = -50;
-			int enemyType = 1 + rand() % 2;
-			if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
-			else if (enemyType == ENE_ZAK02)
-			{
-				int vx = 0;
-				if (player.x < x - 50) vx -= 3;
-				else if (player.x > x + 50) vx += 3;
-				setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
-			}
-		}
+		int spd = 1;
+		if (_scene == PLAY && _distance == 0) spd = 0; // ボス戦はスクロール停止
 
-		//雑魚機3の出現
-		if (_distance % 120 == 1)
-		{
-			int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
-			setEnemy(x, -100, 0, 40 + rand() % 20, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
-		}
-
-		//ボス出現
-		if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
-
-		//アイテムの出現
-		if (_distance % 800 == 1) setItem();
-
-		moveEnemy();
-		movePlayer();
-		moveBullet();
-		moveItem();
-
+		scrollBG(spd); //背景のスクロール
+		moveEnemy(); //敵機の制御
+		moveBullet(); //弾の制御
+		moveItem(); //アイテムの制御
 		drawEffect(); //エフェクトの描画
-		stageMap();
+		stageMap(); // ステージマップ
 		drawParameter(); //自機のシールドなどのパラメーターを表示
+		
+		_timer++;
+		switch (_scene)
+		{
+		case TITLE:
+			drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "Shooting Game", 0xffffff, 80);
+			drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
+			if (CheckHitKey(KEY_INPUT_SPACE))
+			{
+				initVariable();
+				_scene = PLAY;
+			}
+			break;
+
+		case PLAY:
+
+			movePlayer(); //自機の制御
+			if (_distance > 0) _distance--;
+
+			//雑魚機の出現
+			//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
+			if (300 < _distance  && _distance % 20 == 0)
+			{
+				int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
+				int y = -50;
+				int enemyType = 1 + rand() % 2;
+				if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
+				else if (enemyType == ENE_ZAK02)
+				{
+					int vx = 0;
+					if (player.x < x - 50) vx -= 3;
+					else if (player.x > x + 50) vx += 3;
+					setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+				}
+			}
+
+			//雑魚機3の出現
+			if (300 < _distance && _distance < 900 && _distance % 30 == 0)
+			{
+				int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
+				int y = -100;
+				int vy = 40 + rand() % 20;
+				setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+			}
+
+			//ボス出現
+			if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
+
+			//アイテムの出現
+			if (_distance % 800 == 1) setItem();
+
+			//自機の体力がなくなった場合
+			if (player.shield == 0)
+			{
+				StopSoundMem(_bgm); //BGM停止
+				_scene = GAMEOVER;
+				_timer = 0; //自機の爆発演出時間を制御するため
+				break;
+			}
+			break;
+
+		case GAMEOVER:
+			if (_timer < FPS * 3)
+			{
+				if (_timer % 7 == 0) setEffect(player.x + rand() % 81 - 40, player.y + rand() % 81 - 40, EFF_EXPLODE);
+			}
+			else if (_timer == FPS * 3)
+			{
+				PlaySoundMem(_gameOverSE, DX_PLAYTYPE_BACK);
+			}
+			else
+			{
+				drawTextCenter(SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.3, "GAME OVER", 0xff0000, 80);
+			}
+
+			if (_timer > FPS * 10) _scene = TITLE;
+			break;
+
+		case CLEAR: 
+			movePlayer(); // 自機の制御
+			if (_timer < FPS * 3)
+			{
+				if (_timer % 7 == 0)
+					setEffect(enemy[_bossIdx].x + rand() % 201 - 100, enemy[_bossIdx].y + rand() % 201 - 100, EFF_EXPLODE);
+			}
+			else if (_timer == FPS * 3)
+			{
+				PlaySoundMem(_gameClearSE, DX_PLAYTYPE_BACK);
+			}
+			else
+			{
+				drawTextCenter(SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.3, "STAGE CLEAR!", 0xffffff, 80);
+			}
+			if (_timer > FPS * 10)
+			{
+				_stage++;
+				_distance = STAGE_DISTANCE;
+				_scene = PLAY;
+			}
+
+			break;
+		}
+
+		// スコア、ハイスコア、ステージ数の表示
+		drawText(10, 10, "SCORE %07d", _score, 0xffffff, 30);
+		drawText(SCREEN_WIDTH - 300, 10, "HIGHSCORE %07d", _highScore, 0xffffff, 30);
+		drawText(SCREEN_WIDTH - 145, SCREEN_HEIGHT - 40, "STAGE %02d", _stage, 0xffffff, 30);
 
 		ScreenFlip();
 		WaitTimer(1000 / FPS);
@@ -158,6 +237,12 @@ void initVariable(void)
 	player.vy = 5;
 	player.shield = PLAYER_SHIELD_MAX;
 	GetGraphSize(_imgFighter, &player.width, &player.height);
+	for (int i = 0; i < ENEMY_MAX; i++) enemy[i].isState = 0; // 全ての敵機を存在しない状態に
+	_score = 0;
+	_stage = 1;
+	_noDamageFrameCount = 0;
+	_weaponLV = 1;
+	_distance = STAGE_DISTANCE;
 }
 
 
@@ -411,6 +496,12 @@ void damageEnemy(int n, int damage)
 	{
 		enemy[n].isState = 0;
 		setEffect(enemy[n].x, enemy[n].y, EFF_EXPLODE); //爆発演出
+		if (enemy[n].pattern == ENE_BOSS)
+		{
+			StopSoundMem(_bgm);
+			_scene = CLEAR;
+			_timer = 0;
+		}
 	}
 }
 
@@ -559,6 +650,16 @@ void moveItem(void)
 		}
 		PlaySoundMem(_itemSE, DX_PLAYTYPE_BACK);
 	}
+}
+
+void drawTextCenter(int x, int y, const char* txt, int col, int fontSize)
+{
+	SetFontSize(fontSize);
+	int strWidth = GetDrawStringWidth(txt, strlen(txt));
+	x -= strWidth / 2;
+	y -= fontSize / 2;
+	DrawString(x + 1, y + 1, txt, 0x000000);
+	DrawString(x, y, txt, col);
 }
 
 /// <summary>
