@@ -11,7 +11,7 @@ struct OBJECT
 	int image; //画像
 	int width; //画像の幅
 	int height; //画像の高さ
-	int durability; //耐久力
+	int shield; //耐久力
 	int timer; //タイマー
 };
 
@@ -23,7 +23,9 @@ void drawImage(int img, int x, int y);
 void movePlayer(void);
 void setBullet(void);
 void moveBullet(void);
-int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int durability);
+int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int shield);
 void moveEnemy(void);
 void stageMap(void);
 void damageEnemy(int n, int damage);
+void drawText(int x, int y, const char* txt, int val, int col, int siz);
+void drawParameter(void);

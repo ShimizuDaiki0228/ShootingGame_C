@@ -9,6 +9,7 @@ const int IMG_ENEMY_MAX = 5; // 敵の画像の枚数（種類）
 const int BULLET_MAX = 100; // 自機が発射する弾の最大数
 const int ENEMY_MAX = 100; //敵機の最大数
 const int STAGE_DISTANCE = FPS * 60; // ステージの長さ
+const int PLAYER_SHIELD_MAX = 8; // 自機のシールドの最大値
 enum {ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS}; //敵機の種類
 
 //ゲームに使用する変数や配列を定義
@@ -23,6 +24,8 @@ int _bossIdx = 0;
 int _stage = 1;
 int _score = 0;
 int _highScore = 10000; 
+int _noDamageFrameCount = 0; // 無敵状態時の時間を保持
+
 
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
@@ -76,6 +79,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		//ボス出現
 		if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
+
+		//自機のシールドなどのパラメーターを表示
+		drawParameter();
 
 		moveEnemy();
 
@@ -138,6 +144,8 @@ void initVariable(void)
 	player.y = SCREEN_HEIGHT / 2;
 	player.vx = 5;
 	player.vy = 5;
+	player.shield = PLAYER_SHIELD_MAX;
+	GetGraphSize(_imgFighter, &player.width, &player.height);
 }
 
 
@@ -188,7 +196,9 @@ void movePlayer(void)
 		countSpaceKey = 0;
 	}
 	oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE); // スペースキーの状態を保持
-	drawImage(_imgFighter, player.x, player.y);
+	if (_noDamageFrameCount > 0) _noDamageFrameCount--;
+	//　被ダメ時は2フレームに一回、通常時は常に表示
+	if(_noDamageFrameCount % 4 < 2) drawImage(_imgFighter, player.x, player.y);
 }
 
 /// <summary>
@@ -268,7 +278,7 @@ int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int durability)
 			enemy[i].isState = 1;
 			enemy[i].pattern = pattern;
 			enemy[i].image = img;
-			enemy[i].durability = durability * _stage; //ステージが進むごとに強くなる
+			enemy[i].shield = durability * _stage; //ステージが進むごとに強くなる
 			GetGraphSize(img, &enemy[i].width, &enemy[i].height); 
 			return i;
 		}
@@ -285,6 +295,9 @@ void moveEnemy(void)
 	for (int i = 0; i < ENEMY_MAX; i++)
 	{
 		if (enemy[i].isState == 0) continue;
+		
+		//敵機3の特殊行動パターン
+		//高速から低速になり、弾で攻撃すると逃げるように移動する
 		if (enemy[i].pattern == ENE_ZAK03)
 		{
 			if (enemy[i].vy > 1)
@@ -298,6 +311,10 @@ void moveEnemy(void)
 				enemy[i].vy = -4;
 			}
 		}
+
+		//ボスの特殊行動パターン
+		//画面の下側まで来ると上に移動する
+		//画面の上に来ると弾で攻撃し、再度下に移動してくる
 		if (enemy[i].pattern == ENE_BOSS)
 		{
 			if (enemy[i].y > SCREEN_HEIGHT - 120) enemy[i].vy = -2;
@@ -317,15 +334,20 @@ void moveEnemy(void)
 				}
 			}
 		}
+
+		//敵機に共通の行動パターン
 		enemy[i].x += enemy[i].vx;
 		enemy[i].y += enemy[i].vy;
 		drawImage(enemy[i].image, enemy[i].x, enemy[i].y);
+
+		//画面外に移動するとデータを破棄する
 		if (enemy[i].x < -200
 			|| SCREEN_WIDTH + 200 < enemy[i].x
 			|| enemy[i].y < -200
 			|| SCREEN_HEIGHT + 200 < enemy[i].y) enemy[i].isState = 0;
 
-		if (enemy[i].durability > 0)
+		//敵機のシールド
+		if (enemy[i].shield > 0)
 		{
 			for (int j = 0; j < BULLET_MAX; j++)
 			{
@@ -337,6 +359,18 @@ void moveEnemy(void)
 					bullet[i].isState = 0;
 					damageEnemy(i, 1);
 				}
+			}
+		}
+
+		// 自機が通常時の場合に触れた時の処理
+		if (_noDamageFrameCount == 0)
+		{
+			int dx = abs(enemy[i].x - player.x);
+			int dy = abs(enemy[i].y - player.y);
+			if (dx < enemy[i].width / 2 + player.width / 2 && dy < enemy[i].height / 2 + player.height / 2)
+			{
+				if (player.shield > 0) player.shield--;
+				_noDamageFrameCount = FPS;
 			}
 		}
 	}
@@ -354,11 +388,47 @@ void damageEnemy(int n, int damage)
 	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 	_score += 100;
 	if (_score > _highScore) _highScore = _score;
-	enemy[n].durability -= damage;
-	if (enemy[n].durability <= 0)
+	enemy[n].shield -= damage;
+	if (enemy[n].shield <= 0)
 	{
 		enemy[n].isState = 0;
 	}
+}
+
+/// <summary>
+/// 影を付けた文字列と値を表示する関数
+/// </summary>
+/// <param name="x"></param>
+/// <param name="y"></param>
+/// <param name="txt"></param>
+/// <param name="val"></param>
+/// <param name="col"></param>
+/// <param name="fontSize"></param>
+void drawText(int x, int y, const char* txt, int val, int col, int fontSize)
+{
+	SetFontSize(fontSize);
+	DrawFormatString(x + 1, y + 1, 0x000000, txt, val);
+	DrawFormatString(x, y, col, txt, val);
+}
+
+/// <summary>
+/// 自機に関するパラメーターを表示
+/// </summary>
+/// <param name=""></param>
+void drawParameter(void)
+{
+	int x = 10; int y = SCREEN_HEIGHT - 30;
+	DrawBox(x, y, x + PLAYER_SHIELD_MAX * 30, y + 20, 0x000000, TRUE);
+	for (int i = 0; i < player.shield; i++)
+	{
+		//自機のパラメーターの色を計算して表示する
+		int r = 128 * (PLAYER_SHIELD_MAX - i) / PLAYER_SHIELD_MAX;
+		int g = 255 * i / PLAYER_SHIELD_MAX;
+		int b = 160 + 96 * i / PLAYER_SHIELD_MAX;
+		DrawBox(x + 2 + i * 30, y + 2, x + 28 + i * 30, y + 18, GetColor(r, g, b), TRUE);
+	}
+	drawText(x, y - 25, "SHILED LV %02d", player.shield, 0xffffff, 20);
+
 }
 
 /// <summary>
