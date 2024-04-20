@@ -35,3 +35,4 @@ void setItem(void);
 void moveItem(void);
 void drawTextCenter(int x, int y, const char* txt, int col, int fontSize);
 void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize);
+void drawTextFade(int x, int y, const char* txt, int col, int fontSize, int alpha);

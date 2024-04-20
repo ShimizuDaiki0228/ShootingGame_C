@@ -53,16 +53,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	SetDrawScreen(DX_SCREEN_BACK);
 
 	initGame();
-	//initVariable();
-	PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
 
 	_distance = STAGE_DISTANCE;
+	int titleTextAlpha = 0;
+	int titleBlackLayerAlpha = 255;
+	bool isCreatorScreenFinished = false;
 
 	while (1)
 	{
 		ClearDrawScreen();
 
 		int spd = 1;
+		
 		if (_scene == PLAY && _distance == 0) spd = 0; // ボス戦はスクロール停止
 
 		scrollBG(spd); //背景のスクロール
@@ -72,18 +74,54 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		drawEffect(); //エフェクトの描画
 		stageMap(); // ステージマップ
 		drawParameter(); //自機のシールドなどのパラメーターを表示
+
+		// スコア、ハイスコア、ステージ数の表示
+		drawText(10, 10, "SCORE %07d", _score, 0xffffff, 30);
+		drawText(SCREEN_WIDTH - 300, 10, "HIGHSCORE %07d", _highScore, 0xffffff, 30);
+		drawText(SCREEN_WIDTH - 145, SCREEN_HEIGHT - 40, "STAGE %02d", _stage, 0xffffff, 30);
 		
 		_timer++;
 		switch (_scene)
 		{
 		case TITLE:
-			drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "Shooting Game", 0xffffff, 80);
-			drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
-			if (CheckHitKey(KEY_INPUT_SPACE))
+			if (titleBlackLayerAlpha > 0)
 			{
-				initVariable();
-				_scene = PLAY;
+				SetDrawBlendMode(DX_BLENDMODE_ALPHA, titleBlackLayerAlpha);
+				DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GetColor(0, 0, 0), TRUE);
+				SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 			}
+			
+			if (50 <= _timer && _timer < 200)
+			{
+				if (titleTextAlpha < 255) titleTextAlpha += 5;
+				drawTextFade(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "CREATED BY", 0xffffff, 50, titleTextAlpha);
+				drawTextFade(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "DAIKI SHIMIZU", 0xffffff, 50, titleTextAlpha);
+			}
+			else if (200 <= _timer && !isCreatorScreenFinished)
+			{
+				titleTextAlpha -= 5;
+				if (titleTextAlpha < 0)
+				{
+					titleTextAlpha = 0;
+					isCreatorScreenFinished = true;
+					PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
+				}
+				drawTextFade(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "CREATED BY", 0xffffff, 50, titleTextAlpha);
+				drawTextFade(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "DAIKI SHIMIZU", 0xffffff, 50, titleTextAlpha);
+			}
+
+			if (isCreatorScreenFinished)
+			{
+				if(titleBlackLayerAlpha > 0) titleBlackLayerAlpha--;
+				drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3, "Shooting Game", 0xffffff, 80);
+				drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
+				if (CheckHitKey(KEY_INPUT_SPACE))
+				{
+					initVariable();
+					_scene = PLAY;
+				}
+			}
+			
 			break;
 
 		case PLAY:
@@ -175,10 +213,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			break;
 		}
 
-		// スコア、ハイスコア、ステージ数の表示
-		drawText(10, 10, "SCORE %07d", _score, 0xffffff, 30);
-		drawText(SCREEN_WIDTH - 300, 10, "HIGHSCORE %07d", _highScore, 0xffffff, 30);
-		drawText(SCREEN_WIDTH - 145, SCREEN_HEIGHT - 40, "STAGE %02d", _stage, 0xffffff, 30);
+		
 
 		ScreenFlip();
 		WaitTimer(1000 / FPS);
@@ -663,6 +698,17 @@ void drawTextCenter(int x, int y, const char* txt, int col, int fontSize)
 	x -= strWidth / 2;
 	y -= fontSize / 2;
 	drawText(x, y, txt, ' ', col, fontSize);
+}
+
+/// <summary>
+/// テキストをフェードさせる
+/// 最初のタイトルの時のテキストに適用する
+/// </summary>
+void drawTextFade(int x, int y, const char* txt, int col, int fontSize, int alpha)
+{
+	SetDrawBlendMode(DX_BLENDMODE_ALPHA, alpha);
+	drawTextCenter(x, y, txt, col, fontSize);
+	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 }
 
 // Ease Out Cubic関数
