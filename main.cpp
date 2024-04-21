@@ -38,7 +38,7 @@ int _scene = TITLE;
 int _timer = 0; // 時間の進行を管理
 bool _isPlayerReady; //自機を動かす準備ができているかどうか。はじめは画面下に隠れており画面内にでてくるとtrueになる
 int _currentPlayerVYTemp; //ステージ更新ごとにvyを変更する必要があるため、別の変数で保存しておきたい
-
+int _gameoverDelayTimeMag = 1; // ゲームオーバー時の爆発時にスローにするための倍率
 
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
@@ -197,13 +197,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			break;
 
 		case GAMEOVER:
-			if (_timer < FPS * 3)
+			if (_timer == 1)
 			{
-				if (_timer % 7 == 0) setEffect(player.x + rand() % 81 - 40, player.y + rand() % 81 - 40, EFF_EXPLODE);
+				WaitTimer(1000); // 時間を一時的に止める
+				_gameoverDelayTimeMag = 3;
 			}
-			else if (_timer == FPS * 3)
+			else if(_timer <= FPS)
 			{
-				PlaySoundMem(_gameOverSE, DX_PLAYTYPE_BACK);
+				if (_timer < FPS)
+				{
+					if (_timer % 7 == 0) setEffect(player.x + rand() % 81 - 40, player.y + rand() % 81 - 40, EFF_EXPLODE);
+				}
+				else if (_timer == FPS)
+				{
+					PlaySoundMem(_gameOverSE, DX_PLAYTYPE_BACK);
+					_gameoverDelayTimeMag = 1;
+				}
 			}
 			else
 			{
@@ -262,7 +271,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE);
 
 		ScreenFlip();
-		WaitTimer(1000 / FPS);
+		WaitTimer(1000 / FPS * _gameoverDelayTimeMag);
 		if (ProcessMessage() == -1) break;
 		if (CheckHitKey(KEY_INPUT_ESCAPE) == 1) break;
 	}
