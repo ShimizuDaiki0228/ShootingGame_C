@@ -15,6 +15,7 @@ const int EFFECT_MAX = 100; //エフェクトの最大数
 const int ITEM_TYPE = 3; //アイテムの種類
 const int WEAPON_LV_MAX = 10; // 武器レベルの最大値
 const int PLAYER_SPEED_MAX = 20; // 自機の速さの最大値
+const int FIRST_PLAYER_SPEED = -35; // ゲーム開始時に画面外から出現してくる自機の速さ
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
 enum { EFF_EXPLODE, EFF_RECOVER }; // エフェクトの種類
 enum { TITLE, PLAY, GAMEOVER, CLEAR }; //シーンの種類
@@ -36,6 +37,7 @@ int _weaponLV = 1; // 自機の武器のレベル（同時に発射される弾数）
 int _scene = TITLE;
 int _timer = 0; // 時間の進行を管理
 bool _isPlayerReady; //自機を動かす準備ができているかどうか。はじめは画面下に隠れており画面内にでてくるとtrueになる
+int _currentPlayerVYTemp; //ステージ更新ごとにvyを変更する必要があるため、別の変数で保存しておきたい
 
 
 struct OBJECT player; //自機用の構造体変数
@@ -66,6 +68,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		ClearDrawScreen();
 
 		int spd = 1;
+		static int oldSpaceKey; //画面遷移で連続して次の画面に行かないように
 		
 		if (_scene == PLAY && _distance == 0) spd = 0; // ボス戦はスクロール停止
 
@@ -121,7 +124,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				if (titleTextHeight <= 0)
 				{
 					drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
-					if (CheckHitKey(KEY_INPUT_SPACE))
+					if (CheckHitKey(KEY_INPUT_SPACE) && oldSpaceKey == 0)
 					{
 						initVariable();
 						_scene = PLAY;
@@ -141,7 +144,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				if (player.y <= SCREEN_HEIGHT - 200)
 				{
 					_isPlayerReady = true;
-					player.vy = 5;
+					player.vy = _currentPlayerVYTemp;
 				}
 			}
 			else
@@ -206,8 +209,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			{
 				drawTextCenter(SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.3, "GAME OVER", 0xff0000, 80);
 			}
+			
 
-			if (_timer > FPS * 10) _scene = TITLE;
+			if (_timer > FPS * 5)
+			{
+				drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to title.", 0xffffff, 30);
+				if (CheckHitKey(KEY_INPUT_SPACE))
+				{
+					_scene = TITLE;
+					StopSoundMem(_gameOverSE);
+					PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
+				}
+			}
 			break;
 
 		case CLEAR: 
@@ -225,18 +238,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			{
 				drawTextCenter(SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.3, "STAGE CLEAR!", 0xffffff, 80);
 			}
-			if (_timer > FPS * 10)
+			if (_timer > FPS * 5)
 			{
-				_stage++;
-				_distance = STAGE_DISTANCE;
-				_scene = PLAY;
-				PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
+				drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to NextStage.", 0xffffff, 30);
+				if (CheckHitKey(KEY_INPUT_SPACE))
+				{
+					_isPlayerReady = false;
+					player.x = SCREEN_WIDTH / 2;
+					player.y = SCREEN_HEIGHT;
+					player.vy = FIRST_PLAYER_SPEED;
+					_currentPlayerVYTemp = player.vy;
+					_stage++;
+					_distance = STAGE_DISTANCE;
+					_scene = PLAY;
+					StopSoundMem(_gameClearSE, DX_PLAYTYPE_BACK);
+					PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
+				}
 			}
 
 			break;
 		}
 
-		
+		oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE);
 
 		ScreenFlip();
 		WaitTimer(1000 / FPS);
@@ -292,7 +315,7 @@ void initVariable(void)
 	player.x = SCREEN_WIDTH / 2;
 	player.y = SCREEN_HEIGHT;
 	player.vx = 5;
-	player.vy = -35; //ゲームスタート時に自機が画面外から出てくるように
+	player.vy = FIRST_PLAYER_SPEED; //ゲームスタート時に自機が画面外から出てくるように
 	player.shield = PLAYER_SHIELD_MAX;
 	GetGraphSize(_imgFighter, &player.width, &player.height);
 	for (int i = 0; i < ENEMY_MAX; i++) enemy[i].isState = 0; // 全ての敵機を存在しない状態に
@@ -302,6 +325,7 @@ void initVariable(void)
 	_weaponLV = 1;
 	_distance = STAGE_DISTANCE;
 	_isPlayerReady = false;
+	_currentPlayerVYTemp = 5;
 }
 
 
