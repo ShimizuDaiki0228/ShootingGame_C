@@ -4,8 +4,8 @@ struct OBJECT
 {
 	int x; //x座標
 	int y; //y座標
-	int vx; //x軸方向の速さ
-	int vy; //y軸方向の速さ
+	double vx; //x軸方向の速さ
+	double vy; //y軸方向の速さ
 	int isState; //存在するか
 	int pattern; //敵機の動きのパターン
 	int image; //画像
@@ -23,7 +23,7 @@ void drawImage(int img, int x, int y);
 void movePlayer(void);
 void setBullet(void);
 void moveBullet(void);
-int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int shield);
+int setEnemy(int x, int y, double vx, double vy, int pattern, int img, int shield);
 void moveEnemy(void);
 void stageMap(void);
 void damageEnemy(int n, int damage);

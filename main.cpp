@@ -35,6 +35,7 @@ int _noDamageFrameCount = 0; // 無敵状態時の時間を保持
 int _weaponLV = 1; // 自機の武器のレベル（同時に発射される弾数）
 int _scene = TITLE;
 int _timer = 0; // 時間の進行を管理
+bool _isPlayerReady; //自機を動かす準備ができているかどうか。はじめは画面下に隠れており画面内にでてくるとtrueになる
 
 
 struct OBJECT player; //自機用の構造体変数
@@ -132,49 +133,64 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		case PLAY:
 
-			movePlayer(); //自機の制御
-			if (_distance > 0) _distance--;
-
-			//雑魚機の出現
-			//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
-			if (300 < _distance  && _distance % 20 == 0)
+			if (!_isPlayerReady)
 			{
-				int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
-				int y = -50;
-				int enemyType = 1 + rand() % 2;
-				if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
-				else if (enemyType == ENE_ZAK02)
+				player.y += player.vy;
+				player.vy *= 0.8;
+				drawImage(_imgFighter, player.x, player.y);
+				if (player.y <= SCREEN_HEIGHT - 200)
 				{
-					int vx = 0;
-					if (player.x < x - 50) vx -= 3;
-					else if (player.x > x + 50) vx += 3;
-					setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+					_isPlayerReady = true;
+					player.vy = 5;
 				}
 			}
-
-			//雑魚機3の出現
-			if (300 < _distance && _distance < 900 && _distance % 30 == 0)
+			else
 			{
-				int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
-				int y = -100;
-				int vy = 40 + rand() % 20;
-				setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+				movePlayer(); //自機の制御
+				if (_distance > 0) _distance--;
+
+				//雑魚機の出現
+				//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
+				if (300 < _distance && _distance % 20 == 0)
+				{
+					int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
+					int y = -50;
+					int enemyType = 1 + rand() % 2;
+					if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
+					else if (enemyType == ENE_ZAK02)
+					{
+						int vx = 0;
+						if (player.x < x - 50) vx -= 3;
+						else if (player.x > x + 50) vx += 3;
+						setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+					}
+				}
+
+				//雑魚機3の出現
+				if (300 < _distance && _distance < 900 && _distance % 30 == 0)
+				{
+					int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
+					int y = -100;
+					int vy = 40 + rand() % 20;
+					setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+				}
+
+				//ボス出現
+				if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
+
+				//アイテムの出現
+				if (_distance % 800 == 1) setItem();
+
+				//自機の体力がなくなった場合
+				if (player.shield == 0)
+				{
+					StopSoundMem(_bgm); //BGM停止
+					_scene = GAMEOVER;
+					_timer = 0; //自機の爆発演出時間を制御するため
+					break;
+				}
 			}
-
-			//ボス出現
-			if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
-
-			//アイテムの出現
-			if (_distance % 800 == 1) setItem();
-
-			//自機の体力がなくなった場合
-			if (player.shield == 0)
-			{
-				StopSoundMem(_bgm); //BGM停止
-				_scene = GAMEOVER;
-				_timer = 0; //自機の爆発演出時間を制御するため
-				break;
-			}
+			
 			break;
 
 		case GAMEOVER:
@@ -273,9 +289,9 @@ void initGame(void)
 void initVariable(void)
 {
 	player.x = SCREEN_WIDTH / 2;
-	player.y = SCREEN_HEIGHT / 2;
+	player.y = SCREEN_HEIGHT;
 	player.vx = 5;
-	player.vy = 5;
+	player.vy = -35; //ゲームスタート時に自機が画面外から出てくるように
 	player.shield = PLAYER_SHIELD_MAX;
 	GetGraphSize(_imgFighter, &player.width, &player.height);
 	for (int i = 0; i < ENEMY_MAX; i++) enemy[i].isState = 0; // 全ての敵機を存在しない状態に
@@ -284,6 +300,7 @@ void initVariable(void)
 	_noDamageFrameCount = 0;
 	_weaponLV = 1;
 	_distance = STAGE_DISTANCE;
+	_isPlayerReady = false;
 }
 
 
@@ -409,7 +426,7 @@ void moveBullet(void)
 /// <param name="img"></param>
 /// <param name="durability"></param>
 /// <returns></returns>
-int setEnemy(int x, int y, int vx, int vy, int pattern, int img, int durability)
+int setEnemy(int x, int y, double vx, double vy, int pattern, int img, int durability)
 {
 	for (int i = 0; i < ENEMY_MAX; i++)
 	{
