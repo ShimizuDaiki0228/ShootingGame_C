@@ -230,6 +230,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				_stage++;
 				_distance = STAGE_DISTANCE;
 				_scene = PLAY;
+				PlaySoundMem(_bgm, DX_PLAYTYPE_LOOP);
 			}
 
 			break;
