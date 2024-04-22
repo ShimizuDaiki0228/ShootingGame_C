@@ -20,6 +20,11 @@ const int START_WARNING_TIME = 500; //ボスが登場する前の警告を表示し始める時間
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
 enum { EFF_EXPLODE, EFF_RECOVER }; // エフェクトの種類
 enum { TITLE, PLAY, GAMEOVER, CLEAR }; //シーンの種類
+const char* options[] = {
+		"Return To Game",
+		"Return To Title",
+		"Restart To Game"
+};
 
 //ゲームに使用する変数や配列を定義
 int _imgGalaxy, _imgFloor, _imgWallL, _imgWallR; // 背景画像
@@ -69,27 +74,39 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	bool isCreatorScreenFinished = false;
 	int warningScreenAlpha = 0; // ボスが出現する前に表示する警告画面の透明度
 
+	bool isGamePause = false; // ゲームがポーズ状態かどうか
+	int selectPauseScreenTextNumber = 0; //ポーズ画面のどのテキストを選択しているか
+	int oldSpaceKeyInPauseScreenUp = 0; //ポーズ画面で長押しで選択されないように最後に上ボタンが押されたタイミングを監視する
+	int oldSpaceKeyInPauseScreenDown = 0; //ポーズ画面で長押しで選択されないように最後に下ボタンが押されたタイミングを監視する
+
 	while (1)
 	{
 		ClearDrawScreen();
 
+
 		int spd = 1;
 		static int oldSpaceKey; //画面遷移で連続して次の画面に行かないように
 		
-		if (_scene == PLAY && _distance == 0) spd = 0; // ボス戦はスクロール停止
+		if ((_scene == PLAY && _distance == 0 ) || isGamePause) spd = 0; // ボス戦はスクロール停止
 
 		scrollBG(spd); //背景のスクロール
-		moveEnemy(); //敵機の制御
-		moveBullet(); //弾の制御
-		moveItem(); //アイテムの制御
-		drawEffect(); //エフェクトの描画
-		stageMap(); // ステージマップ
-		drawParameter(); //自機のシールドなどのパラメーターを表示
 
-		// スコア、ハイスコア、ステージ数の表示
-		drawText(10, 10, "SCORE %07d", _score, 0xffffff, 30);
-		drawText(SCREEN_WIDTH - 300, 10, "HIGHSCORE %07d", _highScore, 0xffffff, 30);
-		drawText(SCREEN_WIDTH - 145, SCREEN_HEIGHT - 40, "STAGE %02d", _stage, 0xffffff, 30);
+		if (!isGamePause)
+		{
+			moveEnemy(); //敵機の制御
+			moveBullet(); //弾の制御
+			moveItem(); //アイテムの制御
+			drawEffect(); //エフェクトの描画
+			stageMap(); // ステージマップ
+			drawParameter(); //自機のシールドなどのパラメーターを表示
+
+			// スコア、ハイスコア、ステージ数の表示
+			drawText(10, 10, "SCORE %07d", _score, 0xffffff, 30);
+			drawText(SCREEN_WIDTH - 300, 10, "HIGHSCORE %07d", _highScore, 0xffffff, 30);
+			drawText(SCREEN_WIDTH - 145, SCREEN_HEIGHT - 40, "STAGE %02d", _stage, 0xffffff, 30);
+		}
+		
+
 		
 		_timer++;
 		switch (_scene)
@@ -124,7 +141,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			if (isCreatorScreenFinished)
 			{
 				if(titleBlackLayerAlpha > 0) titleBlackLayerAlpha--;
-				if (titleTextHeight > 0) titleTextHeight -= 2;
+				if (titleTextHeight > 0)
+				{
+					titleTextHeight -= 2;
+					if (CheckHitKey(KEY_INPUT_SPACE) && oldSpaceKey == 0)
+					{
+						titleBlackLayerAlpha = 0;
+						titleTextHeight = 0;
+						oldSpaceKey = 1;
+					}
+				}
+				
 				drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.3 - titleTextHeight, "Shooting Game", 0xffffff, 80);
 
 				if (titleTextHeight <= 0)
@@ -132,6 +159,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 					drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
 					if (CheckHitKey(KEY_INPUT_SPACE) && oldSpaceKey == 0)
 					{
+						titleTextHeight = SCREEN_HEIGHT / 2;
 						initVariable();
 						_scene = PLAY;
 					}
@@ -142,76 +170,121 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		case PLAY:
 
-			if (!_isPlayerReady)
+			if (CheckHitKey(KEY_INPUT_LSHIFT)) isGamePause = true;
+			if (isGamePause)
 			{
-				player.y += player.vy;
-				player.vy *= 0.8;
-				drawImage(_imgFighter, player.x, player.y);
-				if (player.y <= SCREEN_HEIGHT - 200)
-				{
-					_isPlayerReady = true;
-					player.vy = _currentPlayerVYTemp;
+				SetDrawBlendMode(DX_BLENDMODE_ALPHA, 128);
+				DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0x000000, TRUE);
+				for (int i = 0; i < 3; i++) {
+					int y = SCREEN_HEIGHT * (0.25 + 0.25 * i);
+					if (i == selectPauseScreenTextNumber) {
+						drawTextBlinking(SCREEN_WIDTH / 2, y, options[i], 0xff0000, 50);
+					}
+					else {
+						drawTextCenter(SCREEN_WIDTH / 2, y, options[i], 0x000000, 50);
+					}
 				}
+				SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+
+				
+				if (CheckHitKey(KEY_INPUT_UP) && oldSpaceKeyInPauseScreenUp == 0)	
+					selectPauseScreenTextNumber = (selectPauseScreenTextNumber - 1 + 3) % 3;
+				if (CheckHitKey(KEY_INPUT_DOWN) && oldSpaceKeyInPauseScreenDown == 0) 
+					selectPauseScreenTextNumber = (selectPauseScreenTextNumber + 1) % 3;
+
+				oldSpaceKeyInPauseScreenUp = CheckHitKey(KEY_INPUT_UP);
+				oldSpaceKeyInPauseScreenDown = CheckHitKey(KEY_INPUT_DOWN);
+
+				if (CheckHitKey(KEY_INPUT_SPACE))
+				{
+					if (selectPauseScreenTextNumber == 1)
+					{
+						//敵機及び自機のリセットのため、ゲーム開始時と一部処理が重なっているが仕方なし
+						initVariable();
+						_scene = TITLE;
+					}
+					else if(selectPauseScreenTextNumber == 2) initVariable();
+
+					oldSpaceKey = 1;
+					isGamePause = false;
+					selectPauseScreenTextNumber = 0;
+				}
+				
 			}
 			else
 			{
-				movePlayer(); //自機の制御
-				if (_distance > 0) _distance--;
-
-				//雑魚機の出現
-				//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
-				if (START_WARNING_TIME < _distance && _distance % 20 == 0)
+				if (!_isPlayerReady)
 				{
-					int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
-					int y = -50;
-					int enemyType = 1 + rand() % 2;
-					if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
-					else if (enemyType == ENE_ZAK02)
+					player.y += player.vy;
+					player.vy *= 0.8;
+					drawImage(_imgFighter, player.x, player.y);
+					if (player.y <= SCREEN_HEIGHT - 200)
 					{
-						int vx = 0;
-						if (player.x < x - 50) vx -= 3;
-						else if (player.x > x + 50) vx += 3;
-						setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+						_isPlayerReady = true;
+						player.vy = _currentPlayerVYTemp;
 					}
 				}
-
-				//雑魚機3の出現
-				if (START_WARNING_TIME < _distance && _distance < 900 && _distance % 30 == 0)
+				else
 				{
-					int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
-					int y = -100;
-					int vy = 40 + rand() % 20;
-					setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
-				}
+					movePlayer(); //自機の制御
+					if (_distance > 0) _distance--;
 
-				//ボス登場前に警告画面を表示する
-				if (_distance <= START_WARNING_TIME - 200 && 1 < _distance)
-				{
-					if (_distance == START_WARNING_TIME - 200) _timer = 0;
+					//雑魚機の出現
+					//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
+					if (START_WARNING_TIME < _distance && _distance % 20 == 0)
+					{
+						int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
+						int y = -50;
+						int enemyType = 1 + rand() % 2;
+						if (enemyType == ENE_ZAK01) setEnemy(x, y, 0, 3, ENE_ZAK01, _imgEnemy[ENE_ZAK01], 1);
+						else if (enemyType == ENE_ZAK02)
+						{
+							int vx = 0;
+							if (player.x < x - 50) vx -= 3;
+							else if (player.x > x + 50) vx += 3;
+							setEnemy(x, y, vx, 5, ENE_ZAK02, _imgEnemy[ENE_ZAK02], 3);
+						}
+					}
 
-					warningScreenAlpha = CalculateAlphaEaseOutCubicMethod(_timer, 60, 170);
-					SetDrawBlendMode(DX_BLENDMODE_ALPHA, warningScreenAlpha);
-					drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, "WARNING!!!", 0xffff00, 120);
-					DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff0000, TRUE);
-					SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+					//雑魚機3の出現
+					if (START_WARNING_TIME < _distance && _distance < 900 && _distance % 30 == 0)
+					{
+						int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
+						int y = -100;
+						int vy = 40 + rand() % 20;
+						setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+					}
+
+					//ボス登場前に警告画面を表示する
+					if (_distance <= START_WARNING_TIME - 200 && 1 < _distance)
+					{
+						if (_distance == START_WARNING_TIME - 200) _timer = 0;
+
+						warningScreenAlpha = calculateAlphaEaseOutCubicMethod(_timer, 60, 170);
+						SetDrawBlendMode(DX_BLENDMODE_ALPHA, warningScreenAlpha);
+						drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, "WARNING!!!", 0xffff00, 120);
+						DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff0000, TRUE);
+						SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 					
-				}
+					}
 
-				//ボス出現
-				if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
+					//ボス出現
+					if (_distance == 1) _bossIdx = setEnemy(SCREEN_WIDTH / 2, -120, 0, 1, ENE_BOSS, _imgEnemy[ENE_BOSS], 200);
 
-				//アイテムの出現
-				if (_distance % 800 == 1) setItem();
+					//アイテムの出現
+					if (_distance % 800 == 1) setItem();
 
-				//自機の体力がなくなった場合
-				if (player.shield == 0)
-				{
-					StopSoundMem(_bgm); //BGM停止
-					_scene = GAMEOVER;
-					_timer = 0; //自機の爆発演出時間を制御するため
-					break;
+					//自機の体力がなくなった場合
+					if (player.shield == 0)
+					{
+						StopSoundMem(_bgm); //BGM停止
+						_scene = GAMEOVER;
+						_timer = 0; //自機の爆発演出時間を制御するため
+						break;
+					}
 				}
 			}
+
 			
 			break;
 
@@ -287,9 +360,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			break;
 		}
 
+
+		
+
+
 		oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE);
 
-		UpdateScreenShake(); // スクリーンシェイクの更新
+		updateScreenShake(); // スクリーンシェイクの更新
 		ScreenFlip();
 		WaitTimer(1000 / FPS * _gameoverDelayTimeMag);
 		if (ProcessMessage() == -1) break;
@@ -357,8 +434,18 @@ void initVariable(void)
 	_currentPlayerVYTemp = 5;
 }
 
+/// <summary>
+/// ゲーム中にポーズを行う
+/// </summary>
+/// <param name=""></param>
+/// <returns></returns>
+void pauseGameScreenProcess(void)
+{
+
+}
+
 // スクリーンシェイクを開始する関数
-void StartScreenShake(int duration, int magnitude) {
+void startScreenShake(int duration, int magnitude) {
 	_shakeDuration = duration;
 	_shakeMagnitude = magnitude;
 }
@@ -367,7 +454,7 @@ void StartScreenShake(int duration, int magnitude) {
 /// ダメージを受けた時などの画面の揺れを制御を行う
 /// </summary>
 /// <param name=""></param>
-void UpdateScreenShake() {
+void updateScreenShake() {
 	if (_shakeDuration > 0) {
 		// 揺れがアクティブな間は持続時間を減らす
 		_shakeDuration--;
@@ -434,7 +521,8 @@ void movePlayer(void)
 	}
 	oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE); // スペースキーの状態を保持
 	if (_noDamageFrameCount > 0) _noDamageFrameCount--;
-	//　被ダメ時は2フレームに一回、通常時は常に表示
+	// 被ダメ時は2フレームに一回、通常時は常に表示
+	// ダメージを受けた際の画面の揺れも考慮した描画を実装している
 	if(_noDamageFrameCount % 4 < 2) drawImage(_imgFighter, player.x + _shakeOffsetX / 2, player.y);
 }
 
@@ -612,7 +700,7 @@ void moveEnemy(void)
 			int dy = abs(enemy[i].y - player.y);
 			if (dx < enemy[i].width / 2 + player.width / 2 && dy < enemy[i].height / 2 + player.height / 2)
 			{
-				StartScreenShake(20, 20); // 30フレームの間、強度10で画面を揺らす
+				startScreenShake(20, 20); // 20フレームの間、強度20で画面を揺らす
 				if (player.shield > 0) player.shield--;
 				_noDamageFrameCount = FPS;
 			}
@@ -818,14 +906,14 @@ void drawTextFade(int x, int y, const char* txt, int col, int fontSize, int alph
 }
 
 // Ease Out Cubic関数
-double EaseOutCubic(double x) {
+double easeOutCubic(double x) {
 	double p = 1 - x;
 	return 1 - pow(p, 3);
 }
 
 // アルファ値を計算する関数
 // 
-int CalculateAlphaEaseOutCubicMethod(int time, int duration, int alpha) {
+int calculateAlphaEaseOutCubicMethod(int time, int duration, int alpha) {
 	// 正規化された時間 (0.0 から 1.0)
 	// duration の半分で折り返す
 	double normalizedTime = static_cast<double>(time % duration) / duration;
@@ -840,7 +928,7 @@ int CalculateAlphaEaseOutCubicMethod(int time, int duration, int alpha) {
 	}
 
 	// Ease Out Cubicを適用して滑らかな変化を作る
-	double eased = EaseOutCubic(triangleWave);
+	double eased = easeOutCubic(triangleWave);
 
 	// アルファ値 (0 から 255)
 	return static_cast<int>(alpha * eased);
@@ -852,7 +940,7 @@ int CalculateAlphaEaseOutCubicMethod(int time, int duration, int alpha) {
 void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize)
 {
 	// アルファ値を計算 (80フレームごとに繰り返し)
-	int _alpha = CalculateAlphaEaseOutCubicMethod(_timer, 80, 255);
+	int _alpha = calculateAlphaEaseOutCubicMethod(_timer, 80, 255);
 	// 描画モードをアルファブレンドにして透明度を時間に合わせて変更させる
 	SetDrawBlendMode(DX_BLENDMODE_ALPHA, _alpha);
 	drawTextCenter(x, y, txt, col, fontSize);
