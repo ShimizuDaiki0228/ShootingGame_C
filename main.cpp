@@ -40,6 +40,10 @@ int _timer = 0; // 時間の進行を管理
 bool _isPlayerReady; //自機を動かす準備ができているかどうか。はじめは画面下に隠れており画面内にでてくるとtrueになる
 int _currentPlayerVYTemp; //ステージ更新ごとにvyを変更する必要があるため、別の変数で保存しておきたい
 int _gameoverDelayTimeMag = 1; // ゲームオーバー時の爆発時にスローにするための倍率
+int _shakeDuration; //画面の揺れを起こす残り時間
+int _shakeMagnitude; // 画面の揺れの強さ
+int _shakeOffsetX;
+int _shakeOffsetY;
 
 struct OBJECT player; //自機用の構造体変数
 struct OBJECT bullet[BULLET_MAX]; //弾用の構造体の配列
@@ -285,6 +289,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 		oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE);
 
+		UpdateScreenShake(); // スクリーンシェイクの更新
 		ScreenFlip();
 		WaitTimer(1000 / FPS * _gameoverDelayTimeMag);
 		if (ProcessMessage() == -1) break;
@@ -352,6 +357,34 @@ void initVariable(void)
 	_currentPlayerVYTemp = 5;
 }
 
+// スクリーンシェイクを開始する関数
+void StartScreenShake(int duration, int magnitude) {
+	_shakeDuration = duration;
+	_shakeMagnitude = magnitude;
+}
+
+/// <summary>
+/// ダメージを受けた時などの画面の揺れを制御を行う
+/// </summary>
+/// <param name=""></param>
+void UpdateScreenShake() {
+	if (_shakeDuration > 0) {
+		// 揺れがアクティブな間は持続時間を減らす
+		_shakeDuration--;
+
+		// 揺れのオフセットを計算（ランダムに-から+の範囲で）
+		_shakeOffsetX = (rand() % (_shakeMagnitude * 2 + 1)) - _shakeMagnitude;
+		_shakeOffsetY = (rand() % (_shakeMagnitude * 2 + 1)) - _shakeMagnitude;
+
+		// 画面の描画位置をオフセットする
+		SetDrawScreen(DX_SCREEN_BACK);
+		SetDrawArea(0, 0, SCREEN_WIDTH + _shakeOffsetX, SCREEN_HEIGHT + _shakeOffsetY);
+	}
+	else {
+		// 揺れがない場合は描画範囲をリセット
+		SetDrawArea(-10, -10, SCREEN_WIDTH + 10, SCREEN_HEIGHT + 10);
+	}
+}
 
 void drawImage(int img, int x, int y)
 {
@@ -402,7 +435,7 @@ void movePlayer(void)
 	oldSpaceKey = CheckHitKey(KEY_INPUT_SPACE); // スペースキーの状態を保持
 	if (_noDamageFrameCount > 0) _noDamageFrameCount--;
 	//　被ダメ時は2フレームに一回、通常時は常に表示
-	if(_noDamageFrameCount % 4 < 2) drawImage(_imgFighter, player.x, player.y);
+	if(_noDamageFrameCount % 4 < 2) drawImage(_imgFighter, player.x + _shakeOffsetX / 2, player.y);
 }
 
 /// <summary>
@@ -579,6 +612,7 @@ void moveEnemy(void)
 			int dy = abs(enemy[i].y - player.y);
 			if (dx < enemy[i].width / 2 + player.width / 2 && dy < enemy[i].height / 2 + player.height / 2)
 			{
+				StartScreenShake(20, 20); // 30フレームの間、強度10で画面を揺らす
 				if (player.shield > 0) player.shield--;
 				_noDamageFrameCount = FPS;
 			}

@@ -38,3 +38,5 @@ void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize);
 void drawTextFade(int x, int y, const char* txt, int col, int fontSize, int alpha);
 double EaseOutCubic(double x);
 int CalculateAlphaEaseOutCubicMethod(int time, int duration, int alpha);
+void StartScreenShake(int duration, int magnitude);
+void UpdateScreenShake(void);
