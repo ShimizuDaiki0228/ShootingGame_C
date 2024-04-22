@@ -16,6 +16,7 @@ const int ITEM_TYPE = 3; //アイテムの種類
 const int WEAPON_LV_MAX = 10; // 武器レベルの最大値
 const int PLAYER_SPEED_MAX = 20; // 自機の速さの最大値
 const int FIRST_PLAYER_SPEED = -35; // ゲーム開始時に画面外から出現してくる自機の速さ
+const int START_WARNING_TIME = 500; //ボスが登場する前の警告を表示し始める時間
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
 enum { EFF_EXPLODE, EFF_RECOVER }; // エフェクトの種類
 enum { TITLE, PLAY, GAMEOVER, CLEAR }; //シーンの種類
@@ -59,9 +60,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 	_distance = STAGE_DISTANCE;
 	int titleTextAlpha = 0;
-	int titleBlackLayerAlpha = 255;
+	int titleBlackLayerAlpha = 255; //　クリエイターの名前を表示する黒画面の透明度
 	int titleTextHeight = SCREEN_HEIGHT / 2; //タイトルテキストを上から表示する際の初期位置
 	bool isCreatorScreenFinished = false;
+	int warningScreenAlpha = 0; // ボスが出現する前に表示する警告画面の透明度
 
 	while (1)
 	{
@@ -154,7 +156,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 				//雑魚機の出現
 				//ボスが出現する前に警告画面を表示したいので、一定距離以下では出現しないように
-				if (300 < _distance && _distance % 20 == 0)
+				if (START_WARNING_TIME < _distance && _distance % 20 == 0)
 				{
 					int x = 100 + rand() % (SCREEN_WIDTH - 200); //出現位置x座標。端100以内には出てこないように
 					int y = -50;
@@ -170,12 +172,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 				}
 
 				//雑魚機3の出現
-				if (300 < _distance && _distance < 900 && _distance % 30 == 0)
+				if (START_WARNING_TIME < _distance && _distance < 900 && _distance % 30 == 0)
 				{
 					int x = 100 + rand() % (SCREEN_WIDTH - 200); // 出現位置x座標
 					int y = -100;
 					int vy = 40 + rand() % 20;
 					setEnemy(x, y, 0, vy, ENE_ZAK03, _imgEnemy[ENE_ZAK03], 5);
+				}
+
+				//ボス登場前に警告画面を表示する
+				if (_distance <= START_WARNING_TIME - 200 && 1 < _distance)
+				{
+					if (_distance == START_WARNING_TIME - 200) _timer = 0;
+
+					warningScreenAlpha = CalculateAlphaEaseOutCubicMethod(_timer, 60, 170);
+					SetDrawBlendMode(DX_BLENDMODE_ALPHA, warningScreenAlpha);
+					drawTextCenter(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, "WARNING!!!", 0xffff00, 120);
+					DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0xff0000, TRUE);
+					SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+					
 				}
 
 				//ボス出現
@@ -775,7 +790,8 @@ double EaseOutCubic(double x) {
 }
 
 // アルファ値を計算する関数
-int CalculateAlpha(int time, int duration) {
+// 
+int CalculateAlphaEaseOutCubicMethod(int time, int duration, int alpha) {
 	// 正規化された時間 (0.0 から 1.0)
 	// duration の半分で折り返す
 	double normalizedTime = static_cast<double>(time % duration) / duration;
@@ -793,7 +809,7 @@ int CalculateAlpha(int time, int duration) {
 	double eased = EaseOutCubic(triangleWave);
 
 	// アルファ値 (0 から 255)
-	return static_cast<int>(255 * eased);
+	return static_cast<int>(alpha * eased);
 }
 
 /// <summary>
@@ -802,7 +818,7 @@ int CalculateAlpha(int time, int duration) {
 void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize)
 {
 	// アルファ値を計算 (80フレームごとに繰り返し)
-	int _alpha = CalculateAlpha(_timer, 80);
+	int _alpha = CalculateAlphaEaseOutCubicMethod(_timer, 80, 255);
 	// 描画モードをアルファブレンドにして透明度を時間に合わせて変更させる
 	SetDrawBlendMode(DX_BLENDMODE_ALPHA, _alpha);
 	drawTextCenter(x, y, txt, col, fontSize);
