@@ -2,6 +2,7 @@
 #include "main.h";
 #include <stdlib.h>
 #include <math.h>
+#include <iostream>
 
 //定数の定義
 const int SCREEN_WIDTH = 1200, SCREEN_HEIGHT = 720;
@@ -20,11 +21,19 @@ const int START_WARNING_TIME = 500; //ボスが登場する前の警告を表示し始める時間
 enum { ENE_BULLET, ENE_ZAK01, ENE_ZAK02, ENE_ZAK03, ENE_BOSS }; //敵機の種類
 enum { EFF_EXPLODE, EFF_RECOVER }; // エフェクトの種類
 enum { TITLE, PLAY, GAMEOVER, CLEAR }; //シーンの種類
-const char* options[] = {
-		"Return To Game",
-		"Return To Title",
-		"Restart To Game"
+//ポーズ画面で選択できるテキスト一覧
+const char* PAUSE_OPTIONS[] = {
+		"Press SPACE to return to Game",
+		"Press SPACE to return to Title",
+		"Press SPACE to restart to Game"
 };
+const int PAUSE_OPTIONS_SIZE = sizeof(PAUSE_OPTIONS) / sizeof(PAUSE_OPTIONS[0]);
+//タイトル画面で選択できるテキスト一覧
+const char* TITLE_OPTIONS[] = {
+	"Press SPACE to Start.",
+	"Press SPACE to Tutorial."
+};
+const int TITLE_OPTIONS_SIZE = sizeof(TITLE_OPTIONS) / sizeof(TITLE_OPTIONS[0]);
 
 //ゲームに使用する変数や配列を定義
 int _imgGalaxy, _imgFloor, _imgWallL, _imgWallR; // 背景画像
@@ -75,9 +84,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	int warningScreenAlpha = 0; // ボスが出現する前に表示する警告画面の透明度
 
 	bool isGamePause = false; // ゲームがポーズ状態かどうか
-	int selectPauseScreenTextNumber = 0; //ポーズ画面のどのテキストを選択しているか
-	int oldSpaceKeyInPauseScreenUp = 0; //ポーズ画面で長押しで選択されないように最後に上ボタンが押されたタイミングを監視する
-	int oldSpaceKeyInPauseScreenDown = 0; //ポーズ画面で長押しで選択されないように最後に下ボタンが押されたタイミングを監視する
+	int selectTextNumber = 0; //ポーズ画面のどのテキストを選択しているか
+	int oldKeyUpInTextSelect = 0; //ポーズ画面で長押しで選択されないように最後に上ボタンが押されたタイミングを監視する
+	int oldKeyDownInTextSelect = 0; //ポーズ画面で長押しで選択されないように最後に下ボタンが押されたタイミングを監視する
 
 	while (1)
 	{
@@ -156,9 +165,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
 				if (titleTextHeight <= 0)
 				{
-					drawTextBlinking(SCREEN_WIDTH / 2, SCREEN_HEIGHT * 0.7, "Press SPACE to start.", 0xffffff, 30);
+					selectText(TITLE_OPTIONS, TITLE_OPTIONS_SIZE, 0.7, 0.1, &selectTextNumber, &oldKeyUpInTextSelect, &oldKeyDownInTextSelect);
+
 					if (CheckHitKey(KEY_INPUT_SPACE) && oldSpaceKey == 0)
 					{
+						resetSelectTextParameter(&selectTextNumber, &oldKeyUpInTextSelect, &oldKeyDownInTextSelect, &oldSpaceKey);
 						titleTextHeight = SCREEN_HEIGHT / 2;
 						initVariable();
 						_scene = PLAY;
@@ -175,39 +186,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 			{
 				SetDrawBlendMode(DX_BLENDMODE_ALPHA, 128);
 				DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, 0x000000, TRUE);
-				for (int i = 0; i < 3; i++) {
-					int y = SCREEN_HEIGHT * (0.25 + 0.25 * i);
-					if (i == selectPauseScreenTextNumber) {
-						drawTextBlinking(SCREEN_WIDTH / 2, y, options[i], 0xff0000, 50);
-					}
-					else {
-						drawTextCenter(SCREEN_WIDTH / 2, y, options[i], 0x000000, 50);
-					}
-				}
+				selectText(PAUSE_OPTIONS, PAUSE_OPTIONS_SIZE, 0.25, 0.25, &selectTextNumber, &oldKeyUpInTextSelect, &oldKeyDownInTextSelect);
 				SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
-
-				
-				if (CheckHitKey(KEY_INPUT_UP) && oldSpaceKeyInPauseScreenUp == 0)	
-					selectPauseScreenTextNumber = (selectPauseScreenTextNumber - 1 + 3) % 3;
-				if (CheckHitKey(KEY_INPUT_DOWN) && oldSpaceKeyInPauseScreenDown == 0) 
-					selectPauseScreenTextNumber = (selectPauseScreenTextNumber + 1) % 3;
-
-				oldSpaceKeyInPauseScreenUp = CheckHitKey(KEY_INPUT_UP);
-				oldSpaceKeyInPauseScreenDown = CheckHitKey(KEY_INPUT_DOWN);
 
 				if (CheckHitKey(KEY_INPUT_SPACE))
 				{
-					if (selectPauseScreenTextNumber == 1)
+					if (selectTextNumber == 1)
 					{
 						//敵機及び自機のリセットのため、ゲーム開始時と一部処理が重なっているが仕方なし
 						initVariable();
 						_scene = TITLE;
 					}
-					else if(selectPauseScreenTextNumber == 2) initVariable();
+					else if(selectTextNumber == 2) initVariable();
 
-					oldSpaceKey = 1;
+					resetSelectTextParameter(&selectTextNumber, &oldKeyUpInTextSelect, &oldKeyDownInTextSelect, &oldSpaceKey);
 					isGamePause = false;
-					selectPauseScreenTextNumber = 0;
 				}
 				
 			}
@@ -945,6 +938,42 @@ void drawTextBlinking(int x, int y, const char* txt, int col, int fontSize)
 	SetDrawBlendMode(DX_BLENDMODE_ALPHA, _alpha);
 	drawTextCenter(x, y, txt, col, fontSize);
 	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+}
+
+/// <summary>
+/// いくつかの選択肢からどれを選択するか
+/// </summary>
+/// <param name="txt"></param>
+/// <param name="height"></param>
+/// <param name="heightInterval"></param>
+void selectText(const char** txt, int txtSize, double height, double heightInterval, int* selectTextNumber, int* oldKeyUp, int* oldKeyDown)
+{
+	for (int i = 0; i < txtSize; i++) {
+		int y = SCREEN_HEIGHT * (height + heightInterval * i);
+		if (i == *selectTextNumber) {
+			drawTextBlinking(SCREEN_WIDTH / 2, y, txt[i], 0xff0000, 50);
+		}
+		else {
+			drawTextCenter(SCREEN_WIDTH / 2, y, txt[i], 0xffffff, 50);
+		}
+	}
+
+
+	if (CheckHitKey(KEY_INPUT_UP) && *oldKeyUp == 0)
+		*selectTextNumber = (*selectTextNumber - 1 + txtSize) % txtSize;
+	if (CheckHitKey(KEY_INPUT_DOWN) && *oldKeyDown == 0)
+		*selectTextNumber = (*selectTextNumber + 1) % txtSize;
+
+	*oldKeyUp = CheckHitKey(KEY_INPUT_UP);
+	*oldKeyDown = CheckHitKey(KEY_INPUT_DOWN);
+}
+
+void resetSelectTextParameter(int* selectTextNumber, int* oldKeyUp, int* oldKeyDown, int* oldSpaceKey)
+{
+	*selectTextNumber = 0;
+	*oldKeyUp = 0;
+	*oldKeyDown = 0;
+	*oldSpaceKey = 1;
 }
 
 /// <summary>

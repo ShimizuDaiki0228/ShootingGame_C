@@ -41,3 +41,5 @@ int calculateAlphaEaseOutCubicMethod(int time, int duration, int alpha);
 void startScreenShake(int duration, int magnitude);
 void updateScreenShake(void);
 void pauseGameScreenProcess(void);
+void selectText(const char** txt, int txtSize, double height, double heightInterval, int* selectTextNumber, int* oldKeyUp, int* oldKeyDown);
+void resetSelectTextParameter(int* selectTextNumber, int* oldKeyUp, int* oldKeyDown, int* oldSpaceKey);
